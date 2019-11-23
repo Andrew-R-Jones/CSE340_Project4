@@ -18,6 +18,14 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="inputbuf.cc" />
+    <ClCompile Include="lexer.cc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="inputbuf.h" />
+    <ClInclude Include="lexer.h" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <ProjectGuid>{A0597CDC-D75E-4EE4-85CC-41F280272AF9}</ProjectGuid>
