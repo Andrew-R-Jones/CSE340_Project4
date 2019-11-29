@@ -19,11 +19,16 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="compiler.cc" />
     <ClCompile Include="inputbuf.cc" />
+    <ClCompile Include="ir_debug.cc" />
     <ClCompile Include="lexer.cc" />
+    <ClCompile Include="parser.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="compiler.h" />
     <ClInclude Include="inputbuf.h" />
+    <ClInclude Include="ir_debug.h" />
     <ClInclude Include="lexer.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

@@ -224,6 +224,7 @@ Token LexicalAnalyzer::GetToken()
     }
 }
 
+/*
 int main()
 {
     LexicalAnalyzer lexer;
@@ -237,3 +238,5 @@ int main()
         token.Print();
     }
 }
+
+*/
