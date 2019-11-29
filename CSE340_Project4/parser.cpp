@@ -10,30 +10,37 @@
 using namespace std;
 
 LexicalAnalyzer lexer;
+struct ValueNode* node_table[256];
+
+int global_count = 0;
+int num_count = 0;
+
 
 void parse_program();
 void parse_var_decl();
-struct StatementNode* parse_body();
 void parse_id_list();
-struct StatementNode * parse_stmt_list();
-void parse_stmt();
 bool check_for_next_statement();
-void parse_assign_stmt();
-struct StatementNode* parse_body();
-void parse_assign_stmt();
 void parse_primary();
 void parse_expr();
 bool is_operator(int oper);
 void parse_id();
 void parse_num();
-void parse_print_stmt();
-void parse_while_stmt();
+TokenType peek();
+
+struct StatementNode* parse_body();
+struct StatementNode* parse_stmt_list();
+struct StatementNode* parse_stmt();
+struct StatementNode* parse_assign_stmt();
+struct StatementNode* parse_body();
+struct StatementNode* parse_print_stmt();
+struct StatementNode* parse_while_stmt();
+struct StatementNode* parse_for_stmt();
+struct StatementNode* parse_if_statement();
+struct StatementNode* parse_switch_stmt();
+
 void parse_condition();
-void parse_if_statement();
-void parse_switch_stmt();
 void parse_case_list();
 void parse_default_case();
-void parse_for_stmt();
 void parse_case_list();
 void parse_case();
 
@@ -44,6 +51,12 @@ void syntax_error()
 	exit(1);
 }
 
+TokenType peek() 
+{
+	Token t = lexer.GetToken();
+	lexer.UngetToken(t);
+	return t.token_type;
+}
 
 
 const string ERROR_MESSAGE = "Syntax Error";
@@ -110,7 +123,7 @@ void parse_default_case()
 	
 }
 
-void parse_switch_stmt() 
+struct StatementNode* parse_switch_stmt()
 {
 	Token t1, t2, t3;
 
@@ -125,7 +138,7 @@ void parse_switch_stmt()
 	parse_case_list();
 
 	t3 = lexer.GetToken();
-	if (t3.token_type == RBRACE) { return; }
+	if (t3.token_type == RBRACE) { return NULL; }
 	else if (t3.token_type == DEFAULT)
 	{
 		lexer.UngetToken(t3);
@@ -135,9 +148,10 @@ void parse_switch_stmt()
 	}
 	else { syntax_error(); }
 
+	return NULL;
 }
 
-void parse_for_stmt() 
+struct StatementNode* parse_for_stmt()
 {
 	Token t = lexer.GetToken();
 	if (t.token_type != FOR) { syntax_error(); }
@@ -157,6 +171,9 @@ void parse_for_stmt()
 	if (t.token_type != RPAREN) { syntax_error(); }
 
 	parse_body();
+
+	return NULL;
+
 }
 
 void parse_case_list()
@@ -222,20 +239,53 @@ void parse_primary()
 
 */
 
+void addNumToNodeTable(Token t)
+{
+	struct ValueNode* temp = new ValueNode{};
 
-void parse_assign_stmt() 
+
+}
+
+ValueNode* getTableValue(Token t) 
+{
+
+	for (int count = 0; count < global_count; count++)
+	{
+		if (node_table[count]->name == t.lexeme)
+		{
+			return node_table[count];
+		}
+	}
+	return NULL;
+}
+
+struct StatementNode* parse_assign_stmt()
 {
 	Token t1, t2, t3, t4, t5;
-	
+
 	// parse the id here
 	t1 = lexer.GetToken(); // lhs id
 	t2 = lexer.GetToken(); // should be equal sign
-	
-	if (t2.token_type != EQUAL) { syntax_error(); }
+
+	// instantiate statement node, allocate memory, set all values to zero
+	struct StatementNode* st = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
+
+	// set node's type to assign, instantiate memory for assign statement node
+	st->type = ASSIGN_STMT;
+	st->assign_stmt = (struct AssignmentStatement*) calloc(1, sizeof(struct AssignmentStatement));
+
+	// set the lhs value node
+	st->assign_stmt->left_hand_side = getTableValue(t1);
+
+	if (t2.token_type != EQUAL) { syntax_error(); } // syntax check
 
 	t3 = lexer.GetToken(); // first rhs operand
 	if (t3.token_type == ID || t3.token_type == NUM)
 	{
+		if (t3.token_type == ID) { st->assign_stmt->operand1 = getTableValue(t3); }
+		else { addNumToNodeTable(t3); }
+
+
 		t4 = lexer.GetToken();
 		if (is_operator(t4.token_type))
 		{
@@ -246,7 +296,7 @@ void parse_assign_stmt()
 		else if (t4.token_type == SEMICOLON) 
 		{
 			// create node
-			return;
+			return NULL;
 		}
 		{
 			//have the whole statement here t = t2      t1 is equal sign, t3 is semicolon
@@ -261,14 +311,23 @@ void parse_assign_stmt()
 	t5 = lexer.GetToken();
 	if (t5.token_type != SEMICOLON) { syntax_error(); }
 
+	return NULL;
 
 }
 
 void parse_id_list() 
 {
+	
+
+
 	Token t = lexer.GetToken();
 	if (t.token_type == ID)
 	{
+		struct ValueNode *temp = new ValueNode{};
+		temp->value = 0;
+		temp->name = t.lexeme;
+		node_table[global_count++] = temp;
+
 		//lexer.UngetToken(t);  // here is where the id can be used
 		//parse_id();
 		t = lexer.GetToken();
@@ -287,7 +346,7 @@ void parse_id_list()
 }
 
 
-void parse_print_stmt() 
+struct StatementNode* parse_print_stmt()
 {
 	Token t1, t2, t3;
 
@@ -300,9 +359,11 @@ void parse_print_stmt()
 	t3 = lexer.GetToken();
 	if (t3.token_type != SEMICOLON) { syntax_error(); }
 
+	return NULL;
+
 }
 
-void parse_while_stmt() 
+struct StatementNode* parse_while_stmt()
 {
 	Token t1 = lexer.GetToken();
 	if (t1.token_type != WHILE) { syntax_error(); }
@@ -310,16 +371,20 @@ void parse_while_stmt()
 	parse_condition();
 	parse_body();
 
+	return NULL;
+
 }
 
 
-void parse_if_statement() 
+struct StatementNode* parse_if_statement()
 {
 	Token t1 = lexer.GetToken();
 
 	if (t1.token_type != IF) { syntax_error(); }
 	parse_condition();
 	parse_body();
+
+	return NULL;
 
 }
 
@@ -334,8 +399,9 @@ void parse_condition()
 
 
 
-void parse_stmt()
+struct StatementNode* parse_stmt()
 {
+	struct StatementNode* stmt_node = nullptr;
 	Token t1, t2;
 	t1 = lexer.GetToken();
 	
@@ -343,19 +409,19 @@ void parse_stmt()
 	{
 	case PRINT:
 		lexer.UngetToken(t1);
-		parse_print_stmt();
+		stmt_node = parse_print_stmt();
 		break;
 	case WHILE:
 		lexer.UngetToken(t1);
-		parse_while_stmt();
+		stmt_node = parse_while_stmt();
 		break;
 	case IF:
 		lexer.UngetToken(t1);
-		parse_if_statement();
+		stmt_node = parse_if_statement();
 		break;
 	case FOR:
 		lexer.UngetToken(t1);
-		parse_for_stmt();
+		stmt_node = parse_for_stmt();
 		break;
 	case ID:
 		t2 = lexer.GetToken();
@@ -363,25 +429,43 @@ void parse_stmt()
 		{
 			lexer.UngetToken(t2);
 			lexer.UngetToken(t1);
-			parse_assign_stmt();
+			stmt_node = parse_assign_stmt();
 		}
 		break;
 	default:
 		syntax_error();
 	}
-	
+	return stmt_node;
 }
 
-struct StatementNode* parse_stmt_list() 
+struct StatementNode* parse_stmt_list()
 {
-	parse_stmt();
-	while (check_for_next_statement()) 
+	struct StatementNode * st;
+	struct StatementNode* stl;
+	TokenType type = peek();
+
+	st = parse_stmt();
+	if (check_for_next_statement()) 
 	{	
-		parse_stmt();
+		stl = parse_stmt_list();
+		if (st->type == IF_STMT || type == FOR)
+		{
+			struct StatementNode* current_node = st->next;
+			while (current_node->type != NOOP_STMT)
+			{
+				current_node = current_node->next;
+			}
+			current_node->next = stl;
+		}
+		else
+		{
+			st->next = stl;
+		}
+
+		st->next = stl; // appends the stmt list to the initial stmt
 	}
 
-
-	return NULL;
+	return st;
 }
 
 void parse_var_decl() 
