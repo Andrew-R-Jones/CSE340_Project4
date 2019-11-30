@@ -16,12 +16,11 @@ int global_count = 0;
 int num_count = 0;
 
 
-void parse_program();
+struct StatementNode* parse_program();
 void parse_var_decl();
 void parse_id_list();
 bool check_for_next_statement();
 void parse_primary();
-void parse_expr();
 bool is_operator(int oper);
 void parse_id();
 void parse_num();
@@ -37,8 +36,11 @@ struct StatementNode* parse_while_stmt();
 struct StatementNode* parse_for_stmt();
 struct StatementNode* parse_if_statement();
 struct StatementNode* parse_switch_stmt();
+struct StatementNode* parse_expr();
 
-void parse_condition();
+ValueNode* getTableValue(Token);
+
+StatementNode* parse_condition(StatementNode*);
 void parse_case_list();
 void parse_default_case();
 void parse_case_list();
@@ -97,16 +99,52 @@ bool is_operator(int oper)
 }
 
 
-void parse_expr() 
+struct StatementNode* set_operator(struct StatementNode* st, Token t)
+{
+	switch (t.token_type)
+	{
+	case LESS:
+		st->if_stmt->condition_op = CONDITION_LESS;
+		break;
+	case GREATER:
+		st->if_stmt->condition_op = CONDITION_GREATER;
+		break;
+	case NOTEQUAL:
+		st->if_stmt->condition_op = CONDITION_NOTEQUAL;
+		break;
+	case PLUS:
+		st->assign_stmt->op = OPERATOR_PLUS;
+		break;
+	case MINUS:
+		st->assign_stmt->op = OPERATOR_MINUS;
+		break;
+	case MULT:
+		st->assign_stmt->op = OPERATOR_MULT;
+		break;
+	case DIV:
+		st->assign_stmt->op = OPERATOR_DIV;
+		break;
+	}
+	return st;
+}
+
+
+struct StatementNode* parse_expr(struct StatementNode* st)
 {
 	Token t1, t2, t3, t4;
-	//parse_primary();
-	t1 = lexer.GetToken(); // holds first operand
-	t2 = lexer.GetToken(); // holds operator
-	if (!is_operator(t2.token_type)) { syntax_error(); }
 
-	// parse_primary();
-	t3 = lexer.GetToken(); // holds second operand
+	t1 = lexer.GetToken(); // holds first operand a
+	t2 = lexer.GetToken(); // holds operator +
+	if (!is_operator(t2.token_type)) { syntax_error(); } // syntax check
+
+	t3 = lexer.GetToken(); // holds second operand b
+
+	// example z =  a + b   only focusing on expression a + b in the function
+	st->assign_stmt->operand1 = getTableValue(t1);
+	st = set_operator(st, t2);
+	st->assign_stmt->operand2 = getTableValue(t3);
+
+	return st;
 }
 
 
@@ -153,26 +191,62 @@ struct StatementNode* parse_switch_stmt()
 
 struct StatementNode* parse_for_stmt()
 {
+	// FOR (i = 0; i < 5; i = i + 1 ;)
+		//{ // print i ;  }
+	
+	struct StatementNode* st = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
+	struct StatementNode* statement1 = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
+	struct StatementNode* statement2 = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
+	struct StatementNode* stl = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
+	struct StatementNode* temp;
+
+	struct StatementNode* NOOP_node = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
+	NOOP_node->type = NOOP_STMT;
+	
+	st->if_stmt = (struct IfStatement*) calloc(1, sizeof(struct IfStatement)); // create if-node
+	st->type = IF_STMT;
+	st->next = NOOP_node;
+	st->if_stmt->false_branch = NOOP_node;
+
+	struct StatementNode* gt = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
+	gt->type = GOTO_STMT;
+	gt->goto_stmt = (struct GotoStatement*) calloc(1, sizeof(struct GotoStatement)); // create goto node
+	gt->goto_stmt->target = st;
+	gt->next = NOOP_node;
+
 	Token t = lexer.GetToken();
-	if (t.token_type != FOR) { syntax_error(); }
+	if (t.token_type != FOR) { syntax_error(); }         // for
 
 	t = lexer.GetToken();
-	if (t.token_type != LPAREN) { syntax_error(); }
+	if (t.token_type != LPAREN) { syntax_error(); }      // (
 
-	parse_assign_stmt();
-	parse_condition();
+	statement1 = parse_assign_stmt();					 // i = 0;
+	statement1->next = st;
+	st = parse_condition(st);								 // i < 5
 	
 	t = lexer.GetToken();
-	if (t.token_type != SEMICOLON) { syntax_error(); }
+	if (t.token_type != SEMICOLON) { syntax_error(); }   // ;
 
-	parse_assign_stmt();
+	statement2 = parse_assign_stmt();								 // i = i + 1;
 
 	t = lexer.GetToken();
-	if (t.token_type != RPAREN) { syntax_error(); }
+	if (t.token_type != RPAREN) { syntax_error(); }	     // )
 
-	parse_body();
+	st->if_stmt->true_branch = parse_body();										//{ // body  }
+	temp = st->if_stmt->true_branch;
+	while (temp->next != NULL)
+	{
+		temp = temp->next;
+	}
+	temp->next = statement2; // go to end of the statement list, append statement2
+	temp = st->if_stmt->true_branch;
+	while (temp->next != NULL)
+	{
+		temp = temp->next;
+	}
+	temp->next = gt;
 
-	return NULL;
+	return statement1;
 
 }
 
@@ -239,24 +313,29 @@ void parse_primary()
 
 */
 
-void addNumToNodeTable(Token t)
-{
-	struct ValueNode* temp = new ValueNode{};
-
-
-}
 
 ValueNode* getTableValue(Token t) 
 {
-
-	for (int count = 0; count < global_count; count++)
+	// if type is ID, just return the Node for that name
+	if (t.token_type == ID)
 	{
-		if (node_table[count]->name == t.lexeme)
+		for (int count = 0; count < global_count; count++)
 		{
-			return node_table[count];
+			if (node_table[count]->name == t.lexeme)
+			{
+				return node_table[count];
+			}
 		}
 	}
-	return NULL;
+	else // else its a NUM, need to increase the  add it, 
+	{
+		struct ValueNode* temp = new ValueNode{};
+		temp->value = atoi(t.lexeme.c_str());
+		temp->name = "";
+		node_table[global_count + num_count++] = temp;
+		return temp;
+	}
+	
 }
 
 struct StatementNode* parse_assign_stmt()
@@ -282,36 +361,27 @@ struct StatementNode* parse_assign_stmt()
 	t3 = lexer.GetToken(); // first rhs operand
 	if (t3.token_type == ID || t3.token_type == NUM)
 	{
-		if (t3.token_type == ID) { st->assign_stmt->operand1 = getTableValue(t3); }
-		else { addNumToNodeTable(t3); }
-
-
+		
 		t4 = lexer.GetToken();
 		if (is_operator(t4.token_type))
 		{
 			lexer.UngetToken(t4);
 			lexer.UngetToken(t3);
-			parse_expr();
+			st = parse_expr(st);
 		}
 		else if (t4.token_type == SEMICOLON) 
 		{
-			// create node
-			return NULL;
+			st->assign_stmt->op = OPERATOR_NONE;
+			st->assign_stmt->operand1 = getTableValue(t3);
+			st->assign_stmt-> operand2 = NULL;
+			return st;
 		}
-		{
-			//have the whole statement here t = t2      t1 is equal sign, t3 is semicolon
-			//lexer.UngetToken(t3);
-			//lexer.UngetToken(t2);
-			//parse_primary();
 
-
-		
-		}
 	}
 	t5 = lexer.GetToken();
 	if (t5.token_type != SEMICOLON) { syntax_error(); }
 
-	return NULL;
+	return st;
 
 }
 
@@ -348,6 +418,7 @@ void parse_id_list()
 
 struct StatementNode* parse_print_stmt()
 {
+
 	Token t1, t2, t3;
 
 	t1 = lexer.GetToken(); // holds print keyword
@@ -359,7 +430,12 @@ struct StatementNode* parse_print_stmt()
 	t3 = lexer.GetToken();
 	if (t3.token_type != SEMICOLON) { syntax_error(); }
 
-	return NULL;
+	struct StatementNode* st = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
+	st->type = PRINT_STMT;
+	st->print_stmt = (struct PrintStatement*) calloc(1, sizeof(struct PrintStatement));
+	st->print_stmt->id = getTableValue(t2);
+
+	return st;
 
 }
 
@@ -368,10 +444,35 @@ struct StatementNode* parse_while_stmt()
 	Token t1 = lexer.GetToken();
 	if (t1.token_type != WHILE) { syntax_error(); }
 
-	parse_condition();
-	parse_body();
+	struct StatementNode* temp;
+	struct StatementNode* NOOP_node = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
+	NOOP_node->type = NOOP_STMT;
 
-	return NULL;
+	struct StatementNode* st = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
+	st->type = IF_STMT;
+	st->if_stmt = (struct IfStatement*) calloc(1, sizeof(struct IfStatement)); // create if-node
+	st = parse_condition(st);
+	st->if_stmt->true_branch = parse_body();
+
+	struct StatementNode* gt = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
+	gt->type = GOTO_STMT;
+
+	gt->goto_stmt = (struct GotoStatement*) calloc(1, sizeof(struct GotoStatement)); // create goto node
+	gt->goto_stmt->target = st; 
+
+
+	temp = st->if_stmt->true_branch;
+	while (temp->next != NULL) 
+	{
+		temp = temp->next; }
+	temp->next = gt;
+
+	st->if_stmt->false_branch = NOOP_node;
+	st->next = NOOP_node;
+	NOOP_node->next = NULL;
+
+
+	return st;
 
 }
 
@@ -379,22 +480,45 @@ struct StatementNode* parse_while_stmt()
 struct StatementNode* parse_if_statement()
 {
 	Token t1 = lexer.GetToken();
-
 	if (t1.token_type != IF) { syntax_error(); }
-	parse_condition();
-	parse_body();
 
-	return NULL;
+	struct StatementNode* temp;
+	struct StatementNode* st = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
+	st->type = IF_STMT;
+
+	st->if_stmt = (struct IfStatement*) calloc(1, sizeof(struct IfStatement));
+
+	st = parse_condition(st);
+	st->if_stmt->true_branch = parse_body();
+
+	struct StatementNode* NOOP_node = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
+	NOOP_node->type = NOOP_STMT;
+
+	temp = st->if_stmt->true_branch;
+	while (temp->next != NULL) { temp = temp->next; }
+	temp->next = NOOP_node;
+
+	st->if_stmt->false_branch = NOOP_node;
+	st->next = NOOP_node;
+	NOOP_node->next = NULL;
+
+	return st;
 
 }
 
-void parse_condition() 
+StatementNode* parse_condition(StatementNode* st)
 {
 	Token t1, t2, t3;
 	t1 = lexer.GetToken(); // holds the id, primary lhs of cond
 	t2 = lexer.GetToken(); // holds the relation operator
 	t3 = lexer.GetToken(); // holds the id, primary rhs of cond
 
+	st->if_stmt->condition_operand1 = getTableValue(t1);
+	set_operator(st, t2);
+	st->if_stmt->condition_operand2 = getTableValue(t3);
+
+
+	return st;
 }
 
 
@@ -462,7 +586,7 @@ struct StatementNode* parse_stmt_list()
 			st->next = stl;
 		}
 
-		st->next = stl; // appends the stmt list to the initial stmt
+		//st->next = stl; // appends the stmt list to the initial stmt
 	}
 
 	return st;
@@ -475,10 +599,11 @@ void parse_var_decl()
 	if (t.token_type != SEMICOLON) { syntax_error(); }
 }
 
-void parse_program() 
+struct StatementNode* parse_program()
 {
 	parse_var_decl();
-	parse_body();
+	return parse_body();  // parse the body
+
 }
 
 struct StatementNode* parse_body()
@@ -498,8 +623,5 @@ struct StatementNode* parse_body()
 
 struct StatementNode* parse_generate_intermediate_representation()
 {
-	parse_program();
-	//parse_id_list();  // first line of declaration 
-	return parse_body();  // parse the body
-
+	return parse_program();
 }
