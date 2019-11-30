@@ -1,7 +1,5 @@
 #include <iostream>
 #include <cstdlib>
-#include <map>
-#include <vector>
 #include "compiler.h"
 #include "ir_debug.h"
 #include "lexer.h"
@@ -9,12 +7,11 @@
 
 using namespace std;
 
-LexicalAnalyzer lexer;
 struct ValueNode* node_table[256];
+LexicalAnalyzer lexer;
 
 int global_count = 0;
 int num_count = 0;
-
 
 struct StatementNode* parse_program();
 void parse_var_decl();
@@ -24,7 +21,10 @@ void parse_primary();
 bool is_operator(int oper);
 void parse_id();
 void parse_num();
-TokenType peek();
+void parse_case_list();
+void parse_default_case();
+void parse_case_list();
+void parse_case();
 
 struct StatementNode* parse_body();
 struct StatementNode* parse_stmt_list();
@@ -38,14 +38,9 @@ struct StatementNode* parse_if_statement();
 struct StatementNode* parse_switch_stmt();
 struct StatementNode* parse_expr();
 
-ValueNode* getTableValue(Token);
-
 StatementNode* parse_condition(StatementNode*);
-void parse_case_list();
-void parse_default_case();
-void parse_case_list();
-void parse_case();
-
+ValueNode* getTableValue(Token);
+TokenType peek();
 
 void syntax_error()
 {
@@ -53,7 +48,7 @@ void syntax_error()
 	exit(1);
 }
 
-TokenType peek() 
+TokenType peek()
 {
 	Token t = lexer.GetToken();
 	lexer.UngetToken(t);
@@ -63,7 +58,7 @@ TokenType peek()
 
 const string ERROR_MESSAGE = "Syntax Error";
 
-bool check_for_next_statement() 
+bool check_for_next_statement()
 {
 	Token t = lexer.GetToken();
 
@@ -80,11 +75,11 @@ bool check_for_next_statement()
 	default:
 		lexer.UngetToken(t);
 		return false;
-	}	
+	}
 }
 
 
-bool is_operator(int oper) 
+bool is_operator(int oper)
 {
 	switch (oper)
 	{
@@ -128,7 +123,6 @@ struct StatementNode* set_operator(struct StatementNode* st, Token t)
 	return st;
 }
 
-
 struct StatementNode* parse_expr(struct StatementNode* st)
 {
 	Token t1, t2, t3, t4;
@@ -158,7 +152,7 @@ void parse_default_case()
 
 	if (t.token_type != COLON) { syntax_error(); }
 	parse_body();
-	
+
 }
 
 struct StatementNode* parse_switch_stmt()
@@ -191,29 +185,33 @@ struct StatementNode* parse_switch_stmt()
 
 struct StatementNode* parse_for_stmt()
 {
-	// FOR (i = 0; i < 5; i = i + 1 ;)
+	// FOR (i = 0; i < 5; i = i + 1 ;) // example of FOR stmt syntax
 		//{ // print i ;  }
-	
+
+	// statement nodes to create "FOR" control structure
 	struct StatementNode* st = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
 	struct StatementNode* statement1 = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
 	struct StatementNode* statement2 = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
 	struct StatementNode* stl = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
-	struct StatementNode* temp;
-
 	struct StatementNode* NOOP_node = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
-	NOOP_node->type = NOOP_STMT;
-	
+
+
 	st->if_stmt = (struct IfStatement*) calloc(1, sizeof(struct IfStatement)); // create if-node
 	st->type = IF_STMT;
+
+	// set no-ops
+	NOOP_node->type = NOOP_STMT;
 	st->next = NOOP_node;
 	st->if_stmt->false_branch = NOOP_node;
 
+	// goto node
 	struct StatementNode* gt = (struct StatementNode*) calloc(1, sizeof(struct StatementNode));
 	gt->type = GOTO_STMT;
 	gt->goto_stmt = (struct GotoStatement*) calloc(1, sizeof(struct GotoStatement)); // create goto node
 	gt->goto_stmt->target = st;
 	gt->next = NOOP_node;
 
+	// covers syntax and parses the parts of the for loop
 	Token t = lexer.GetToken();
 	if (t.token_type != FOR) { syntax_error(); }         // for
 
@@ -223,7 +221,7 @@ struct StatementNode* parse_for_stmt()
 	statement1 = parse_assign_stmt();					 // i = 0;
 	statement1->next = st;
 	st = parse_condition(st);								 // i < 5
-	
+
 	t = lexer.GetToken();
 	if (t.token_type != SEMICOLON) { syntax_error(); }   // ;
 
@@ -233,18 +231,20 @@ struct StatementNode* parse_for_stmt()
 	if (t.token_type != RPAREN) { syntax_error(); }	     // )
 
 	st->if_stmt->true_branch = parse_body();										//{ // body  }
+
+	 // go to end of the statement list
+	struct StatementNode* temp = st->if_stmt->true_branch;
+	while (temp->next != NULL)
+	{
+		temp = temp->next;
+	}
+	temp->next = statement2; // append statement2 to the end of the slt
 	temp = st->if_stmt->true_branch;
 	while (temp->next != NULL)
 	{
 		temp = temp->next;
 	}
-	temp->next = statement2; // go to end of the statement list, append statement2
-	temp = st->if_stmt->true_branch;
-	while (temp->next != NULL)
-	{
-		temp = temp->next;
-	}
-	temp->next = gt;
+	temp->next = gt; // sets the jump, or goto node at the tail
 
 	return statement1;
 
@@ -255,7 +255,7 @@ void parse_case_list()
 	parse_case();
 
 	Token t = lexer.GetToken();
-	if (t.token_type == CASE) 
+	if (t.token_type == CASE)
 	{
 		lexer.UngetToken(t);
 		parse_case_list();
@@ -263,13 +263,13 @@ void parse_case_list()
 	else { lexer.UngetToken(t); }
 }
 
-void parse_case() 
+void parse_case()
 {
 	Token t;
 
 	t = lexer.GetToken();
 	if (t.token_type != CASE) { syntax_error(); }
-	
+
 	t = lexer.GetToken(); // create node here
 	if (t.token_type != NUM) { syntax_error(); }
 
@@ -277,17 +277,17 @@ void parse_case()
 	if (t.token_type != COLON) { syntax_error(); }
 
 	parse_body();
-}	
-
-
-/*
-void parse_id() 
-{
-	
 }
 
 
-void parse_num() 
+/*
+void parse_id()
+{
+
+}
+
+
+void parse_num()
 {
 
 }
@@ -302,7 +302,7 @@ void parse_primary()
 	case ID:
 		parse_id();
 		break;
-	case NUM: 
+	case NUM:
 		parse_num();
 		break;
 	default:
@@ -314,7 +314,7 @@ void parse_primary()
 */
 
 
-ValueNode* getTableValue(Token t) 
+ValueNode* getTableValue(Token t)
 {
 	// if type is ID, just return the Node for that name
 	if (t.token_type == ID)
@@ -335,7 +335,7 @@ ValueNode* getTableValue(Token t)
 		node_table[global_count + num_count++] = temp;
 		return temp;
 	}
-	
+
 }
 
 struct StatementNode* parse_assign_stmt()
@@ -361,7 +361,7 @@ struct StatementNode* parse_assign_stmt()
 	t3 = lexer.GetToken(); // first rhs operand
 	if (t3.token_type == ID || t3.token_type == NUM)
 	{
-		
+
 		t4 = lexer.GetToken();
 		if (is_operator(t4.token_type))
 		{
@@ -369,11 +369,11 @@ struct StatementNode* parse_assign_stmt()
 			lexer.UngetToken(t3);
 			st = parse_expr(st);
 		}
-		else if (t4.token_type == SEMICOLON) 
+		else if (t4.token_type == SEMICOLON)
 		{
 			st->assign_stmt->op = OPERATOR_NONE;
 			st->assign_stmt->operand1 = getTableValue(t3);
-			st->assign_stmt-> operand2 = NULL;
+			st->assign_stmt->operand2 = NULL;
 			return st;
 		}
 
@@ -385,15 +385,15 @@ struct StatementNode* parse_assign_stmt()
 
 }
 
-void parse_id_list() 
+void parse_id_list()
 {
-	
+
 
 
 	Token t = lexer.GetToken();
 	if (t.token_type == ID)
 	{
-		struct ValueNode *temp = new ValueNode{};
+		struct ValueNode* temp = new ValueNode{};
 		temp->value = 0;
 		temp->name = t.lexeme;
 		node_table[global_count++] = temp;
@@ -458,13 +458,14 @@ struct StatementNode* parse_while_stmt()
 	gt->type = GOTO_STMT;
 
 	gt->goto_stmt = (struct GotoStatement*) calloc(1, sizeof(struct GotoStatement)); // create goto node
-	gt->goto_stmt->target = st; 
+	gt->goto_stmt->target = st;
 
 
 	temp = st->if_stmt->true_branch;
-	while (temp->next != NULL) 
+	while (temp->next != NULL)
 	{
-		temp = temp->next; }
+		temp = temp->next;
+	}
 	temp->next = gt;
 
 	st->if_stmt->false_branch = NOOP_node;
@@ -528,8 +529,8 @@ struct StatementNode* parse_stmt()
 	struct StatementNode* stmt_node = nullptr;
 	Token t1, t2;
 	t1 = lexer.GetToken();
-	
-	switch(t1.token_type)
+
+	switch (t1.token_type)
 	{
 	case PRINT:
 		lexer.UngetToken(t1);
@@ -564,13 +565,13 @@ struct StatementNode* parse_stmt()
 
 struct StatementNode* parse_stmt_list()
 {
-	struct StatementNode * st;
+	struct StatementNode* st;
 	struct StatementNode* stl;
 	TokenType type = peek();
 
 	st = parse_stmt();
-	if (check_for_next_statement()) 
-	{	
+	if (check_for_next_statement())
+	{
 		stl = parse_stmt_list();
 		if (st->type == IF_STMT || type == FOR)
 		{
@@ -592,7 +593,7 @@ struct StatementNode* parse_stmt_list()
 	return st;
 }
 
-void parse_var_decl() 
+void parse_var_decl()
 {
 	parse_id_list();
 	Token t = lexer.GetToken();
